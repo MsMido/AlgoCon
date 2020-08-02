@@ -106,8 +106,8 @@ class DrivingClient(DrivingController):
         # ########## #
         # ( 처음 시작 시 제외 ) 차량 속도 체크, 충돌 flag가 충돌이 아니어도 차량 충돌 여부 판단
         # ( 차량 충돌 직후에 장애물로부터 거리가 떨어지면 flag 다시 false되기 때문에 아래와 같은 충돌 체크 필요함. )
-        #if sensing_info.lap_progress > 0.5 and not is_accident and -5.0 < sensing_info.speed < 1.0:
-        #    accident_count += 1
+        if sensing_info.lap_progress > 0.5 and not is_accident and -5.0 < sensing_info.speed < 1.0:
+            accident_count += 1
         # 충돌 flag에 대해서는 옆면 충돌, 충돌 후 정상 궤도로 돌아오는 경우 있어 가중치로만 표현
         if sensing_info.collided:
             accident_count += 3
