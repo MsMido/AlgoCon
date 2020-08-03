@@ -70,7 +70,7 @@ class DrivingClient(DrivingController):
         position = 1
         target_dist = self.half_road_limit / 2 - (1.35 * position)  # 1.35는 차폭의절반
         self._newMiddle = target_dist + sensing_info.to_middle # 타겟 위치에 맞는 중앙값 보정
-        set_steering = (ref_angle - sensing_info.moving_angle) / (180 - sensing_info.speed)
+        set_steering = (ref_angle - sensing_info.moving_angle) / (180 - sensing_info.speed+0.00000000000001)
         middle_add = ((target_dist + self._newMiddle) / 400) * -1  # 타겟값을 지나갈때 스티어링을 반대로 쳐주는 카운터
         if sensing_info.lap_progress < 0.5:
             set_steering = 0
@@ -148,9 +148,9 @@ class DrivingClient(DrivingController):
             if len(sensing_info.track_forward_obstacles) > 0:
                 obstacle_middle = sensing_info.track_forward_obstacles[0]['to_middle']
                 if car_middle > 0 and obstacle_middle > 0:
-                    set_steering = -0.5 - (car_middle - obstacle_middle)/10
+                    set_steering = -0.4 + (car_middle - obstacle_middle)/10
                 elif car_middle < 0 and obstacle_middle < 0:
-                    set_steering = 0.5 - (car_middle - obstacle_middle) / 10
+                    set_steering = 0.4 + (car_middle - obstacle_middle) / 10
                 else:
                     # 핸들 얼마나 꺾을지 값을 통해 조절 가능
                     set_steering = 0.5
