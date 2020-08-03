@@ -66,6 +66,13 @@ class DrivingClient(DrivingController):
         ref_angle = (sensing_info.track_forward_angles[angle_num] + sensing_info.track_forward_angles[angle_num + 1]) / 2.5
         # 도로 위치에 따른 보정값 1-6
         position = 1
+        if len(sensing_info.track_forward_obstacles) > 0:
+            fwd_obstacle = sensing_info.track_forward_obstacles[0]
+            if fwd_obstacle['to_middle'] > 0 :
+                position = 1
+            else:
+                position = 5
+
         target_dist = self.half_road_limit / 2 - (1.35 * position)  # 1.35는 차폭의절반
         self._newMiddle = target_dist + sensing_info.to_middle # 타겟 위치에 맞는 중앙값 보정
         set_steering = (ref_angle - sensing_info.moving_angle) / (180 - sensing_info.speed)
@@ -105,14 +112,24 @@ class DrivingClient(DrivingController):
         if angle_short > 20 and sensing_info.speed > angle_short * 5:
             set_throttle = 0
 
-
         #급브레이크 판단용 추가 보정 및 로직 추가 필요
         # if angle_short > 30:
         # if sensing_info.speed > 80 :
         # set_throttle -= 0.2
         # #set_brake = 1
+        # ##### #
+        # 역주행 #
+        # ##### #
+        # 역주행 하고 있는 경우 핸들 완전 꺾을것
+        if not sensing_info.moving_forward:
+            if sensing_info.to_middle > 0:
+                set_steering = 1  # 핸들 방향
+            else:
+                set_steering = -1
+        if sensing_info.speed > 70:
+            accident_count = 0
 
-        # ########## #
+                # ########## #
         # 충돌 시 복구 #
         # ########## #
         # ( 처음 시작 시 제외 ) 차량 속도 체크, 충돌 flag가 충돌이 아니어도 차량 충돌 여부 판단
