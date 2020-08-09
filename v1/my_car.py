@@ -50,14 +50,6 @@ class DrivingClient(DrivingController):
         # Editing area starts from here
         #
         # self.is_debug = True
-        # if self._prevSteering < 2 :
-        # set_steering = self._prevSteering
-        # if self._prevThrottle < 2 and self._prevThrottle > -1:
-        # set_throttle = self._prevThrottle
-        # if self._prevBrake <2 and self._prevBrake > 0:
-        # set_brake = self._prevBrake
-        # Steering 최대각도 50도, 전폭 2m, 전장 4.6m, 휠베이스2.6m, 바퀴폭 0.35m,바퀴외경 0.74m
-        #if self.half_road_limit < self._roadWidth:
         self._roadWidth = self.half_road_limit
 
         if not is_accident:
@@ -67,9 +59,9 @@ class DrivingClient(DrivingController):
         if sensing_info.speed > 200:
             angle_num = int(sensing_info.speed / 20)
         elif sensing_info.speed > 150:
-            angle_num = int(sensing_info.speed / 40)
-        else:
             angle_num = int(sensing_info.speed / 60)
+        else:
+            angle_num = int(sensing_info.speed / 85)
 
         # speed에 맞춰 전방의 커브들의 평균을 사용 - speed 고려 부분 추가 필요
         if angle_num > 8:
@@ -87,36 +79,17 @@ class DrivingClient(DrivingController):
                 self._position = 2
             else:
                 self._position = 5
-        #self._position = 3
         target_dist = self._roadWidth / 2 - (1.35 * self._position)  # 1.35는 차폭의절반
         self._newMiddle = target_dist + sensing_info.to_middle # 타겟 위치에 맞는 중앙값 보정
-        #set_steering = (ref_angle - sensing_info.moving_angle) / (180 - sensing_info.speed)
         middle_add = ((target_dist + self._newMiddle) / 400) * -1  # 타겟값을 지나갈때 스티어링을 반대로 쳐주는 카운터
         set_steering = (ref_angle - sensing_info.moving_angle) / (sensing_info.speed + 0.1)
         first_steering = set_steering  # 값확인용
-        #if abs(sensing_info.to_middle) -1 > self._roadWidth and sensing_info.speed < 150:
         set_steering -= (self._newMiddle / (sensing_info.speed + 0.1))
-        #else:
-        #   set_steering -= (self._newMiddle / 400)  # 타겟값에 추가보정 # !!!!!트랙을 벗어났을때를 판단하여 추가 보정값 필요!!!!!
-
-
-        #sensing_info.moving_angle 도로와 평행한지 나오는 각도
-        #middle_add = (2 - math.atan(sensing_info.speed * 0.01))
-        #set_steering = math.atan(ref_angle - sensing_info.moving_angle) * 0.085
-        #set_steering *= middle_add
 
         second_steering = set_steering  # 값확인용
         set_steering += middle_add/1000  # 최종 스티어링값
         third_steering = set_steering  # 값확인용
 
-
-        # if abs(sensing_info.to_middle - self._prevToMiddle) > 1 :
-        # set_throttle *= 0.8
-        # if abs(sensing_info.to_middle - self._prevToMiddle) > 3:
-        # set_brake +=0.2
-        # else :
-        # set_throttle = 1
-        # set_brake = 0
         #참조 각 들 추가 및 변경 가능
         angle_short = abs(sensing_info.track_forward_angles[4] - sensing_info.track_forward_angles[0])
         angle_long = abs(sensing_info.track_forward_angles[9] - sensing_info.track_forward_angles[5])
@@ -124,49 +97,34 @@ class DrivingClient(DrivingController):
         angle_front = abs(sensing_info.track_forward_angles[1] - sensing_info.track_forward_angles[0])
         angle_end = abs(sensing_info.track_forward_angles[9] - sensing_info.track_forward_angles[0])
 
-        #if sensing_info.speed > 100 and angle_end > 100:
-        #    break_count += 1
-        #if sensing_info.speed > 140 and angle_end > 40:
-        #    break_count += 3
-        #if sensing_info.speed > 180 and angle_end > 40:
-        #    break_count += 5
-        #if sensing_info.speed > 200 and angle_end > 30:
-        #    break_count += 10
-        #if break_count > 0:
-        #    set_brake = 0.5
-        #    set_throttle = -1
-        #    break_count -= 1
-        #    if sensing_info.speed < 90:
-        #        break_count = 0
-        break_angle = int((75 - (sensing_info.speed/4))/10)*10
+        brake_angle = int((75 - (sensing_info.speed/4))/10)*10
+        if angle_short > 70:
+            clean_speed = 140 - (angle_short / 2)
+        else:
+            clean_speed = 150 - (angle_short / 2)
+
+        fullBrakeSpeed = 140 - (angle_short / 2)
         #중간 brake를 위한 angle값 추가 필요
-        if (angle_long > break_angle or angle_short > break_angle) and sensing_info.speed > 60:
-            #    set_throttle = 1
-            set_brake = 0.1
-
-        if angle_short > 20 and sensing_info.speed > angle_short * 5:
-            set_throttle = 0
-        if sensing_info.speed > 140 and angle_end > break_angle:
+        if angle_end > brake_angle and angle_long > brake_angle and sensing_info.speed > 160:
             self._fullBrake = True
-            if angle_end > 40: # 수식으로 변경필요
-                brakeSpeed = 12000 / (angle_end+0.1)  # 수치에 맞춰 값조정 필요
-            else :
-                brakeSpeed = sensing_info.speed * 0.8
-            if brakeSpeed < 60:
-                brakeSpeed = 60
-            if brakeSpeed < self._brakeSpeed:
-                self._brakeSpeed = brakeSpeed
-
+            if self._brakeSpeed > fullBrakeSpeed:
+                self._brakeSpeed = fullBrakeSpeed
+        if angle_middle > brake_angle and sensing_info.speed > clean_speed:
+            self._fullBrake = True
+            self._brakeSpeed = clean_speed
+        if sensing_info.speed > clean_speed and angle_short > 9:
+            set_brake = 0.2
         if self._fullBrake:
             set_throttle = -1
             set_brake = 1
-            if angle_end < break_angle and angle_long < break_angle:
+            if angle_short < brake_angle and angle_end < brake_angle and angle_long < brake_angle:
                 self._fullBrake = False
                 self._brakeSpeed = 200
             if sensing_info.speed < self._brakeSpeed:
                 self._fullBrake = False
                 self._brakeSpeed = 200
-
+        if sensing_info.speed > 240:
+            set_throttle = 0
         if set_steering > 1:
             set_steering = 1
         if set_steering < -1:
@@ -178,157 +136,157 @@ class DrivingClient(DrivingController):
         # if sensing_info.speed > 80 :
         # set_throttle -= 0.2
         # #set_brake = 1
-            # ##### #
-            # 역주행 #
-            # ##### #
-            # 역주행 하고 있는 경우 핸들 완전 꺾을것
-            if sensing_info.moving_forward and forward_flag:
-                forward_flag = False
-                print("역주행 복구 완료=============================================")
-                print("[MyCar] is moving forward: {}".format(sensing_info.moving_forward))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("----------------------------------------------------------")
+        # ##### #
+        # 역주행 #
+        # ##### #
+        # 역주행 하고 있는 경우 핸들 완전 꺾을것
+        if sensing_info.moving_forward and forward_flag:
+            forward_flag = False
+            print("역주행 복구 완료=============================================")
+            print("[MyCar] is moving forward: {}".format(sensing_info.moving_forward))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("----------------------------------------------------------")
 
-            if not sensing_info.moving_forward and sensing_info.speed > 5:
-                forward_flag = True
-                print("역주행====================================================")
-                print("[MyCar] is moving forward: {}".format(sensing_info.moving_forward))
-                print("[MyCar] moving angle: {}".format(sensing_info.moving_angle))
-                print("[MyCar] sensing_info.speed: {}".format(sensing_info.speed))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("----------------------------------------------------------")
-                if sensing_info.to_middle > 0:
-                    set_steering = 1  # 핸들 방향
-                else:
-                    set_steering = -1
+        if not sensing_info.moving_forward and sensing_info.speed > 5:
+            forward_flag = True
+            print("역주행====================================================")
+            print("[MyCar] is moving forward: {}".format(sensing_info.moving_forward))
+            print("[MyCar] moving angle: {}".format(sensing_info.moving_angle))
+            print("[MyCar] sensing_info.speed: {}".format(sensing_info.speed))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("----------------------------------------------------------")
+            if sensing_info.to_middle > 0:
+                set_steering = 1  # 핸들 방향
+            else:
+                set_steering = -1
 
-            # ################################## #
-            # 부딪혔어도 잘 주행하는 경우 카운트 초기화 #
-            # ################################## #
-            if sensing_info.speed > 70 and accident_count > 0:
-                print("accident_count 초기화=====================================")
-                print("초기화 전: {}".format(accident_count))
-                print("[MyCar] is moving forward: {}".format(sensing_info.moving_forward))
-                print("[MyCar] moving angle: {}".format(sensing_info.moving_angle))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("---------------------------------------------------------")
-                accident_count = 0
+        # ################################## #
+        # 부딪혔어도 잘 주행하는 경우 카운트 초기화 #
+        # ################################## #
+        if sensing_info.speed > 70 and accident_count > 0:
+            print("accident_count 초기화=====================================")
+            print("초기화 전: {}".format(accident_count))
+            print("[MyCar] is moving forward: {}".format(sensing_info.moving_forward))
+            print("[MyCar] moving angle: {}".format(sensing_info.moving_angle))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("---------------------------------------------------------")
+            accident_count = 0
 
-            # ########## #
-            # 충돌 시 복구 #
-            # ########## #
-            # ( 처음 시작 시 제외 ) 차량 속도 체크, 충돌 flag가 충돌이 아니어도 차량 충돌 여부 판단
-            # ( 차량 충돌 직후에 장애물로부터 거리가 떨어지면 flag 다시 false되기 때문에 아래와 같은 충돌 체크 필요함. )
-            if sensing_info.lap_progress > 0.5 and not is_accident and -5.0 < sensing_info.speed < 1.0:
-                accident_count += 1
-                print("accident_count 증가=======================================")
-                print("[MyCar] sensing_info.speed: {}".format(sensing_info.speed))
-                print("accident_count: {}/6".format(accident_count))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("---------------------------------------------------------")
-            # 충돌 flag에 대해서는 옆면 충돌, 충돌 후 정상 궤도로 돌아오는 경우 있어 가중치로만 표현
-            if sensing_info.collided:
-                accident_count += 3
-                if len(sensing_info.track_forward_obstacles) > 0:
-                    if sensing_info.track_forward_obstacles[0]["dist"] < 10:
-                        accident_count += 2
-                print("충돌 발생!================================================")
-                print("accident_count: {}/6".format(accident_count))
-                print("차량 속도: {}".format(sensing_info.speed))
-                print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("---------------------------------------------------------")
-            # accident_count 6 이상이면 충돌로 판정
-            if accident_count > 5 and not is_accident:
-                is_accident = True
-                accident_angle = sensing_info.moving_angle
-                accident_dist = sensing_info.to_middle
-                print("사고 발생!================================================")
-                print("현재 차량 각도: {}".format(accident_angle))
-                print("현재 차량 중심에서의 거리: {}".format(sensing_info.to_middle))
-                print("차량 속도: {}".format(sensing_info.speed))
-                print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("---------------------------------------------------------")
+        # ########## #
+        # 충돌 시 복구 #
+        # ########## #
+        # ( 처음 시작 시 제외 ) 차량 속도 체크, 충돌 flag가 충돌이 아니어도 차량 충돌 여부 판단
+        # ( 차량 충돌 직후에 장애물로부터 거리가 떨어지면 flag 다시 false되기 때문에 아래와 같은 충돌 체크 필요함. )
+        if sensing_info.lap_progress > 0.5 and not is_accident and -5.0 < sensing_info.speed < 1.0:
+            accident_count += 1
+            print("accident_count 증가=======================================")
+            print("[MyCar] sensing_info.speed: {}".format(sensing_info.speed))
+            print("accident_count: {}/6".format(accident_count))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("---------------------------------------------------------")
+        # 충돌 flag에 대해서는 옆면 충돌, 충돌 후 정상 궤도로 돌아오는 경우 있어 가중치로만 표현
+        if sensing_info.collided:
+            accident_count += 3
+            if len(sensing_info.track_forward_obstacles) > 0:
+                if sensing_info.track_forward_obstacles[0]["dist"] < 10:
+                    accident_count += 2
+            print("충돌 발생!================================================")
+            print("accident_count: {}/6".format(accident_count))
+            print("차량 속도: {}".format(sensing_info.speed))
+            print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("---------------------------------------------------------")
+        # accident_count 6 이상이면 충돌로 판정
+        if accident_count > 5 and not is_accident:
+            is_accident = True
+            accident_angle = sensing_info.moving_angle
+            accident_dist = sensing_info.to_middle
+            print("사고 발생!================================================")
+            print("현재 차량 각도: {}".format(accident_angle))
+            print("현재 차량 중심에서의 거리: {}".format(sensing_info.to_middle))
+            print("차량 속도: {}".format(sensing_info.speed))
+            print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("---------------------------------------------------------")
 
-            # 충돌 판정 시, 충돌로부터 벗어남 (핸들 방향/속도 변경)
-            if is_accident and not forward_flag:
-                # 핸들 얼마나 꺾을지 값을 통해 조절 가능
-                set_steering = 0.6 - (0.066 * recovery_count)
-                # 도로와의 정렬값에 따라 핸들 방향 조정  (* 얼마나 중심에서 떨어진지에 대한 수치도 사용하는게 좋을지?)
-                # 오른쪽 도로
-                if accident_dist > 0:
-                    if accident_dist < self.half_road_limit / 2:
-                        set_steering *= -1
-                # 중앙/왼쪽 도로
-                else:
-                    if accident_dist < -self.half_road_limit / 2:
-                        set_steering *= -1
-                set_brake = 0  # 브레이크
+        # 충돌 판정 시, 충돌로부터 벗어남 (핸들 방향/속도 변경)
+        if is_accident and not forward_flag:
+            # 핸들 얼마나 꺾을지 값을 통해 조절 가능
+            set_steering = 0.6 - (0.066 * recovery_count)
+            # 도로와의 정렬값에 따라 핸들 방향 조정  (* 얼마나 중심에서 떨어진지에 대한 수치도 사용하는게 좋을지?)
+            # 오른쪽 도로
+            if accident_dist > 0:
+                if accident_dist < self.half_road_limit / 2:
+                    set_steering *= -1
+            # 중앙/왼쪽 도로
+            else:
+                if accident_dist < -self.half_road_limit / 2:
+                    set_steering *= -1
+            set_brake = 0  # 브레이크
 
-                # print("sensing_info.to_middle: {}".format(sensing_info.to_middle))
-                # print("sensing_info.moving_angle: {}".format(sensing_info.moving_angle))
-                # print("sensing_info.moving_forward: {}".format(sensing_info.moving_forward))
+            # print("sensing_info.to_middle: {}".format(sensing_info.to_middle))
+            # print("sensing_info.moving_angle: {}".format(sensing_info.moving_angle))
+            # print("sensing_info.moving_forward: {}".format(sensing_info.moving_forward))
 
-                # 차 후면이 코스 벽에 닿은 상태에서는 전진하도록 함. 도로 중앙에서의 거리, 차 앵글 확인
-                # 정면으로 닿아서 복구 안되는 상태이면 복구 count 확인하여 값을 반대로 바꿔줌.
-                if accident_dist > 10 and -50 < accident_angle < 0:
-                    set_throttle = 1  # 속도
-                elif accident_dist < -10 and 0 < accident_angle < 50:
-                    set_throttle = 1  # 속도
-                else:
-                    set_throttle = -1  # 속도
-                # 충돌로부터 복구중이면 1씩 더함
-                recovery_count += 1
-                # 충돌로부터 복구 하다가 진행방향이 False가 되면 복구 카운트를 다시 줄임( 더 후진/전진하며 회전 하도록 )
-                # if sensing_info.moving_forward:
-                #     recovery_count -= 1
-                #     if sensing_info.moving_angle > 0:
-                #         set_steering = 1  # 핸들 방향
-                #     else:
-                #         set_steering = -1
-                print("복구 진행", recovery_count, "=================================================")
-                print("사고 판정 시 차량 각도: {}".format(accident_angle))
-                print("사고 판정 시 차량 중심에서의 거리: {}".format(accident_dist))
-                print("현재 차량 속도: {}".format(sensing_info.speed))
-                print("현재 차량 각도: {}".format(sensing_info.moving_angle))
-                print("현재 차량 중심에서의 거리: {}".format(sensing_info.to_middle))
-                print("세팅 값: set_steering = ", set_steering, "/ set_throttle = ", set_throttle)
-                print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("---------------------------------------------------------")
+            # 차 후면이 코스 벽에 닿은 상태에서는 전진하도록 함. 도로 중앙에서의 거리, 차 앵글 확인
+            # 정면으로 닿아서 복구 안되는 상태이면 복구 count 확인하여 값을 반대로 바꿔줌.
+            if accident_dist > 10 and -50 < accident_angle < 0:
+                set_throttle = 1  # 속도
+            elif accident_dist < -10 and 0 < accident_angle < 50:
+                set_throttle = 1  # 속도
+            else:
+                set_throttle = -1  # 속도
+            # 충돌로부터 복구중이면 1씩 더함
+            recovery_count += 1
+            # 충돌로부터 복구 하다가 진행방향이 False가 되면 복구 카운트를 다시 줄임( 더 후진/전진하며 회전 하도록 )
+            # if sensing_info.moving_forward:
+            #     recovery_count -= 1
+            #     if sensing_info.moving_angle > 0:
+            #         set_steering = 1  # 핸들 방향
+            #     else:
+            #         set_steering = -1
+            print("복구 진행", recovery_count, "=================================================")
+            print("사고 판정 시 차량 각도: {}".format(accident_angle))
+            print("사고 판정 시 차량 중심에서의 거리: {}".format(accident_dist))
+            print("현재 차량 속도: {}".format(sensing_info.speed))
+            print("현재 차량 각도: {}".format(sensing_info.moving_angle))
+            print("현재 차량 중심에서의 거리: {}".format(sensing_info.to_middle))
+            print("세팅 값: set_steering = ", set_steering, "/ set_throttle = ", set_throttle)
+            print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("---------------------------------------------------------")
 
-            if recovery_count > 9:
-                # 벽면에 정면으로 갖다 박고 있을 경우 속도를 반대로 해서 탈출
-                set_throttle *= -1  # 속도
-                print("복구 불가-반대 방향으로 진행합니다.============================")
-                print("set_throttle: {}".format(set_throttle))
-                print("set_steering: {}".format(set_steering))
-                print("벽이 아닌 장애물 원인인지 확인>")
-                print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
-                print("---------------------------------------------------------")
-            # 후진 ~회 이상 하면 다시 전진. 복구 시간을 줄이고 싶으면 recovery_count 수를 줄인다.
-            # 계속 멈춰있는 상태면 복구된것으로 판정 안함.
-            if recovery_count > 8 and not -1.0 < sensing_info.speed < 1.0:
-                is_accident = False
-                recovery_count = 0
-                accident_count = 0
-                # 장애물로부터 벗어날 수 있도록 방향 한번 더 꺾어줌
-                set_steering *= 1
-                set_brake = 0
-                # 초기 속도와 맞춰줘야함.
-                set_throttle = 1
-                print("복구 완료=================================================")
-                print("사고 판정 시 차량 각도: {}".format(accident_angle))
-                print("사고 판정 시 차량 중심에서의 거리: {}".format(accident_dist))
-                print("현재 차량 속도: {}".format(sensing_info.speed))
-                print("현재 차량 각도: {}".format(sensing_info.moving_angle))
-                print("현재 차량 중심에서의 거리: {}".format(sensing_info.to_middle))
-                print("세팅 값: set_steering = ", set_steering, "/ set_throttle = ", set_throttle)
-                print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
-                print("[MyCar] distance_to_way_points: {}".format(sensing_info.distance_to_way_points))
-                print("맵 진행률: {}".format(sensing_info.lap_progress))
-                print("---------------------------------------------------------")
+        if recovery_count > 9:
+            # 벽면에 정면으로 갖다 박고 있을 경우 속도를 반대로 해서 탈출
+            set_throttle *= -1  # 속도
+            print("복구 불가-반대 방향으로 진행합니다.============================")
+            print("set_throttle: {}".format(set_throttle))
+            print("set_steering: {}".format(set_steering))
+            print("벽이 아닌 장애물 원인인지 확인>")
+            print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
+            print("---------------------------------------------------------")
+        # 후진 ~회 이상 하면 다시 전진. 복구 시간을 줄이고 싶으면 recovery_count 수를 줄인다.
+        # 계속 멈춰있는 상태면 복구된것으로 판정 안함.
+        if recovery_count > 8 and not -1.0 < sensing_info.speed < 1.0:
+            is_accident = False
+            recovery_count = 0
+            accident_count = 0
+            # 장애물로부터 벗어날 수 있도록 방향 한번 더 꺾어줌
+            set_steering *= 1
+            set_brake = 0
+            # 초기 속도와 맞춰줘야함.
+            set_throttle = 1
+            print("복구 완료=================================================")
+            print("사고 판정 시 차량 각도: {}".format(accident_angle))
+            print("사고 판정 시 차량 중심에서의 거리: {}".format(accident_dist))
+            print("현재 차량 속도: {}".format(sensing_info.speed))
+            print("현재 차량 각도: {}".format(sensing_info.moving_angle))
+            print("현재 차량 중심에서의 거리: {}".format(sensing_info.to_middle))
+            print("세팅 값: set_steering = ", set_steering, "/ set_throttle = ", set_throttle)
+            print("[MyCar] track_forward_obstacles: {}".format(sensing_info.track_forward_obstacles))
+            print("[MyCar] distance_to_way_points: {}".format(sensing_info.distance_to_way_points))
+            print("맵 진행률: {}".format(sensing_info.lap_progress))
+            print("---------------------------------------------------------")
         self._prevToMiddle = sensing_info.to_middle
         self._prevBrake = set_brake
         self._prevSteering = set_steering
@@ -344,11 +302,12 @@ class DrivingClient(DrivingController):
         car_controls.throttle = set_throttle
         car_controls.steering = set_steering
 
-        if self.is_debug and self._count == 0:
+        if self.is_debug :#and self._count == 0:
             print("###############", sensing_info.lap_progress, is_accident, self._position)
             print("angleNum=", angle_num, ", refAngle", ref_angle, ", movingAngle=", sensing_info.moving_angle)
             print("front=", angle_front, ", short=", angle_short, ", middle=", angle_middle, ",long=", angle_long,
                   ", end=", angle_end)
+            print("break_angle=", brake_angle, ", clean_speed=",clean_speed)
             print("targetdist=", target_dist, ", to_middle=", sensing_info.to_middle, ", newMiddle=", self._newMiddle)
             print("first=", first_steering, ", second=", second_steering, ", middle_add=", middle_add, ", third=",
                   third_steering)
